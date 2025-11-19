@@ -7,7 +7,7 @@ import { Chat } from '@google/genai';
 
 const RoboSocrates: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 'init', role: 'model', text: 'Saludos, humano. Soy Robo-Sócrates. ¿Qué inquietud filosófica perturba tus circuitos hoy?' }
+    { id: 'init', role: 'model', text: '¡Hola! ¿Qué tal? Soy tu profe de filosofía. ¿Qué te anda dando vueltas por la cabeza hoy? Hablemos sin miedo.' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,12 +36,15 @@ const RoboSocrates: React.FC = () => {
 
     try {
       const result = await chatSessionRef.current.sendMessage({ message: userMsg.text });
-      const responseText = result.text || "Mis sensores no detectan respuesta...";
+      const responseText = result.text || "Che, me quedé pensando y no sé qué decirte...";
       
       const botMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText };
       setMessages(prev => [...prev, botMsg]);
+      
+      // Auto-speak response (optional, but nice for flow)
+      // speakText(responseText); 
     } catch (error) {
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: "Error de sistema. Reiniciando lógica..." }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: "Uhh, se me colgó el pensamiento. Probá de nuevo." }]);
     } finally {
       setIsLoading(false);
     }
@@ -97,12 +100,71 @@ const RoboSocrates: React.FC = () => {
       // Cancel previous speech
       window.speechSynthesis.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'es-ES'; // Spanish
-      utterance.pitch = 0.8; // Lower pitch for "robot" feel
-      utterance.rate = 1.0; 
+      // Helper to get voices properly
+      const getVoices = (): SpeechSynthesisVoice[] => {
+        let voices = window.speechSynthesis.getVoices();
+        return voices;
+      };
+
+      let voices = getVoices();
       
-      window.speechSynthesis.speak(utterance);
+      const speak = () => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // 1. Filter for Spanish voices
+        const spanishVoices = voices.filter(v => v.lang.startsWith('es'));
+        
+        // 2. Define keywords for MALE voices common in browsers/OS
+        // 'Raul', 'Pablo', 'Diego' are common Microsoft/Google male voice names
+        const maleKeywords = ['hombre', 'male', 'jorge', 'pablo', 'raul', 'diego', 'carlos', 'gonzalo', 'martin', 'daniel', 'felipe'];
+        
+        // 3. Priority 1: MALE + LATIN AMERICAN (Mexico, Argentina, 419)
+        let selectedVoice = spanishVoices.find(v => 
+          maleKeywords.some(k => v.name.toLowerCase().includes(k)) && 
+          (v.lang === 'es-MX' || v.lang === 'es-419' || v.lang === 'es-AR' || v.lang === 'es-US')
+        );
+
+        // 4. Priority 2: ANY MALE Spanish (Better to be male from Spain than female from Latam for this request)
+        if (!selectedVoice) {
+          selectedVoice = spanishVoices.find(v => 
+             maleKeywords.some(k => v.name.toLowerCase().includes(k))
+          );
+        }
+
+        // 5. Priority 3: LATIN AMERICAN (Generic - likely female, we will pitch shift down)
+        if (!selectedVoice) {
+           selectedVoice = spanishVoices.find(v => v.lang === 'es-MX' || v.lang === 'es-419' || v.lang === 'es-AR');
+        }
+        
+        // 6. Absolute fallback
+        if (!selectedVoice && spanishVoices.length > 0) {
+            selectedVoice = spanishVoices[0];
+        }
+
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+        }
+
+        // MALE TONE SETTINGS
+        // Check if the selected voice is explicitly identified as male
+        const isKnownMale = selectedVoice && maleKeywords.some(k => selectedVoice.name.toLowerCase().includes(k));
+        
+        // If it's a generic voice (often female by default), we lower the pitch significantly to sound masculine.
+        // If it's already a male voice, we keep it natural.
+        utterance.pitch = isKnownMale ? 1.0 : 0.75; 
+        utterance.rate = 1.0; 
+
+        window.speechSynthesis.speak(utterance);
+      };
+
+      if (voices.length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => {
+           voices = window.speechSynthesis.getVoices();
+           speak();
+        };
+      } else {
+        speak();
+      }
     } else {
       alert("Tu navegador no soporta lectura de voz.");
     }
@@ -141,8 +203,8 @@ const RoboSocrates: React.FC = () => {
           </svg>
         </div>
         <div>
-           <h2 className="font-robot text-xl text-cyan-400 tracking-wider">ROBO-SÓCRATES <span className="text-[10px] align-top bg-cyan-500 text-black px-1 rounded font-bold ml-1">BETA</span></h2>
-           <p className="text-xs text-cyan-600 font-mono">"Conócete a ti mismo... y a tu software"</p>
+           <h2 className="font-robot text-xl text-cyan-400 tracking-wider">SÓCRATES IA <span className="text-[10px] align-top bg-cyan-500 text-black px-1 rounded font-bold ml-1">PROFE</span></h2>
+           <p className="text-xs text-cyan-600 font-mono">"Pensar duele, pero ignorar es peor."</p>
         </div>
       </div>
 
@@ -158,7 +220,7 @@ const RoboSocrates: React.FC = () => {
               <div className="flex items-center justify-between mb-1 opacity-60 text-xs font-mono uppercase">
                 <div className="flex items-center gap-2">
                   {msg.role === 'user' ? <User size={10} /> : <Sparkles size={10} />}
-                  {msg.role === 'user' ? 'TÚ' : 'IA'}
+                  {msg.role === 'user' ? 'TÚ' : 'EL PROFE'}
                 </div>
                 {/* Speak Button for AI messages */}
                 {msg.role === 'model' && (
@@ -219,7 +281,7 @@ const RoboSocrates: React.FC = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={isRecording ? "Escuchando..." : "Escribe o habla..."}
+              placeholder={isRecording ? "Escuchando..." : "Preguntale algo al profe..."}
               disabled={isRecording}
               className="w-full bg-black border border-cyan-700 text-cyan-400 p-3 rounded-lg focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(6,182,212,0.5)] outline-none font-mono"
             />
