@@ -1,0 +1,7 @@
+{
+  "name": "Cinema Sócrates",
+  "description": "Genera imágenes, analiza música y debate filosofía con IA.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
