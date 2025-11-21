@@ -23,20 +23,6 @@ const App: React.FC = () => {
   // Global Error
   const [error, setError] = useState<string | null>(null);
 
-  const handleAudioCaptured = async (audioBlob: Blob) => {
-    setStatus(AppStatus.TRANSCRIBING);
-    setError(null);
-    try {
-      const text = await GeminiService.transcribeAudio(audioBlob);
-      setInputText(text);
-      setStatus(AppStatus.IDLE);
-    } catch (err) {
-      console.error(err);
-      setError("No se pudo entender el audio. Intenta de nuevo.");
-      setStatus(AppStatus.ERROR);
-    }
-  };
-
   const handleMediaSelected = (file: { data: string, mimeType: string, name: string } | null) => {
     setMediaFile(file);
   };
@@ -190,7 +176,6 @@ const App: React.FC = () => {
             <InputSection 
               inputText={inputText} 
               setInputText={setInputText} 
-              onAudioCaptured={handleAudioCaptured}
               onMediaSelected={handleMediaSelected}
               status={status}
             />

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, User, Sparkles, Mic, Volume2, Square } from 'lucide-react';
+import { Send, User, Sparkles } from 'lucide-react';
 import { ChatMessage } from '../types';
 import * as GeminiService from '../services/geminiService';
 import { Chat } from '@google/genai';
@@ -11,12 +11,9 @@ const RoboSocrates: React.FC = () => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   
   const chatSessionRef = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     chatSessionRef.current = GeminiService.createRoboSocratesChat();
@@ -41,132 +38,10 @@ const RoboSocrates: React.FC = () => {
       const botMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText };
       setMessages(prev => [...prev, botMsg]);
       
-      // Auto-speak response (optional, but nice for flow)
-      // speakText(responseText); 
     } catch (error) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: "Uhh, se me colgó el pensamiento. Probá de nuevo." }]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        stream.getTracks().forEach(track => track.stop());
-        
-        // Send to transcription
-        setIsLoading(true);
-        try {
-          const text = await GeminiService.transcribeAudio(audioBlob);
-          setInput(text);
-        } catch (err) {
-          console.error(err);
-          alert("Error escuchando el audio.");
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("No se pudo acceder al micrófono.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const speakText = (text: string) => {
-    if ('speechSynthesis' in window) {
-      // Cancel previous speech
-      window.speechSynthesis.cancel();
-
-      // Helper to get voices properly
-      const getVoices = (): SpeechSynthesisVoice[] => {
-        let voices = window.speechSynthesis.getVoices();
-        return voices;
-      };
-
-      let voices = getVoices();
-      
-      const speak = () => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // 1. Filter for Spanish voices
-        const spanishVoices = voices.filter(v => v.lang.startsWith('es'));
-        
-        // 2. Define keywords for MALE voices common in browsers/OS
-        // 'Raul', 'Pablo', 'Diego' are common Microsoft/Google male voice names
-        const maleKeywords = ['hombre', 'male', 'jorge', 'pablo', 'raul', 'diego', 'carlos', 'gonzalo', 'martin', 'daniel', 'felipe'];
-        
-        // 3. Priority 1: MALE + LATIN AMERICAN (Mexico, Argentina, 419)
-        let selectedVoice = spanishVoices.find(v => 
-          maleKeywords.some(k => v.name.toLowerCase().includes(k)) && 
-          (v.lang === 'es-MX' || v.lang === 'es-419' || v.lang === 'es-AR' || v.lang === 'es-US')
-        );
-
-        // 4. Priority 2: ANY MALE Spanish (Better to be male from Spain than female from Latam for this request)
-        if (!selectedVoice) {
-          selectedVoice = spanishVoices.find(v => 
-             maleKeywords.some(k => v.name.toLowerCase().includes(k))
-          );
-        }
-
-        // 5. Priority 3: LATIN AMERICAN (Generic - likely female, we will pitch shift down)
-        if (!selectedVoice) {
-           selectedVoice = spanishVoices.find(v => v.lang === 'es-MX' || v.lang === 'es-419' || v.lang === 'es-AR');
-        }
-        
-        // 6. Absolute fallback
-        if (!selectedVoice && spanishVoices.length > 0) {
-            selectedVoice = spanishVoices[0];
-        }
-
-        if (selectedVoice) {
-            utterance.voice = selectedVoice;
-        }
-
-        // MALE TONE SETTINGS
-        // Check if the selected voice is explicitly identified as male
-        const isKnownMale = selectedVoice && maleKeywords.some(k => selectedVoice.name.toLowerCase().includes(k));
-        
-        // If it's a generic voice (often female by default), we lower the pitch significantly to sound masculine.
-        // If it's already a male voice, we keep it natural.
-        utterance.pitch = isKnownMale ? 1.0 : 0.75; 
-        utterance.rate = 1.0; 
-
-        window.speechSynthesis.speak(utterance);
-      };
-
-      if (voices.length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => {
-           voices = window.speechSynthesis.getVoices();
-           speak();
-        };
-      } else {
-        speak();
-      }
-    } else {
-      alert("Tu navegador no soporta lectura de voz.");
     }
   };
 
@@ -222,22 +97,12 @@ const RoboSocrates: React.FC = () => {
                   {msg.role === 'user' ? <User size={10} /> : <Sparkles size={10} />}
                   {msg.role === 'user' ? 'TÚ' : 'EL PROFE'}
                 </div>
-                {/* Speak Button for AI messages */}
-                {msg.role === 'model' && (
-                  <button 
-                    onClick={() => speakText(msg.text)}
-                    className="opacity-50 hover:opacity-100 transition-opacity text-cyan-300 p-1"
-                    title="Leer respuesta"
-                  >
-                    <Volume2 size={14} />
-                  </button>
-                )}
               </div>
               <p className="leading-relaxed whitespace-pre-wrap text-sm md:text-base">{msg.text}</p>
             </div>
           </div>
         ))}
-        {isLoading && !isRecording && (
+        {isLoading && (
            <div className="flex justify-start">
              <div className="bg-cyan-900/20 border border-cyan-500/30 p-3 rounded-xl">
                 <span className="flex gap-1">
@@ -254,42 +119,20 @@ const RoboSocrates: React.FC = () => {
       {/* Input Area */}
       <div className="p-4 bg-gray-900 border-t border-cyan-500">
         <div className="flex gap-2 items-end">
-           {/* Mic Button */}
-           {isRecording ? (
-             <button 
-               onClick={stopRecording}
-               className="bg-red-500 text-white p-3 rounded-lg animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-               title="Detener grabación"
-             >
-               <Square size={20} fill="white" />
-             </button>
-           ) : (
-             <button 
-               onClick={startRecording}
-               disabled={isLoading}
-               className="bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-lg transition-colors disabled:opacity-50"
-               title="Hablar al robot"
-             >
-               <Mic size={20} />
-             </button>
-           )}
-
           <div className="flex-grow flex flex-col gap-1">
-            {isRecording && <span className="text-xs text-red-400 animate-pulse font-mono ml-1">Escuchando...</span>}
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={isRecording ? "Escuchando..." : "Preguntale algo al profe..."}
-              disabled={isRecording}
+              placeholder="Escribile algo al profe..."
               className="w-full bg-black border border-cyan-700 text-cyan-400 p-3 rounded-lg focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(6,182,212,0.5)] outline-none font-mono"
             />
           </div>
           
           <button 
             onClick={handleSend}
-            disabled={isLoading || isRecording || !input.trim()}
+            disabled={isLoading || !input.trim()}
             className="bg-cyan-600 hover:bg-cyan-500 text-black p-3 rounded-lg transition-colors disabled:opacity-50"
           >
             <Send size={20} />
