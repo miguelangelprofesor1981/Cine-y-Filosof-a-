@@ -4,7 +4,7 @@ import { ImageStyle, ChatMessage, CinemaGenre } from "../types";
 
 // Initialize the client
 // Note: process.env.API_KEY is injected by the environment.
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_KEY_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Converts a Blob to a Base64 string.
